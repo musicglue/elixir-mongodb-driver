@@ -82,7 +82,6 @@ defmodule Mongo do
       case unquote(result) do
         {:ok, value} -> value
         {:error, error} -> raise error
-        :ok -> nil
       end
     end
   end

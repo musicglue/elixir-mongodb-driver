@@ -350,7 +350,6 @@ defmodule Mongo.BulkWrite do
     |> BulkWriteResult.reduce()
   end
 
-  defp filter_upsert_ids(nil), do: []
   defp filter_upsert_ids(upserted), do: Enum.map(upserted, fn doc -> doc["_id"] end)
 
   defp run_commands(session, {cmds, ids}, opts) do
