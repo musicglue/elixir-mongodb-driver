@@ -1,5 +1,4 @@
 defmodule Reader do
-
   require Logger
 
   ##
@@ -16,7 +15,6 @@ defmodule Reader do
   end
 
   defp read(conn, error) do
-
     if error do
       Logger.info("Called with error")
     end
@@ -24,23 +22,28 @@ defmodule Reader do
     # Gets an enumerable cursor for the results
     cursor = Mongo.find(conn, "data", %{})
 
-    error = case cursor do
-      {:error, error} ->
-        Logger.info("Error: #{inspect error}")
-        true
+    error =
+      case cursor do
+        {:error, error} ->
+          Logger.info("Error: #{inspect(error)}")
+          true
 
-      _ ->
-        cursor
-        |> Enum.to_list()
-        |> Enum.count()
-        false
-    end
+        _ ->
+          cursor
+          |> Enum.to_list()
+          |> Enum.count()
+
+          false
+      end
 
     read(conn, error)
   end
 
   def test() do
-    {:ok, conn} = Mongo.start_link(url: "mongodb://localhost:27017,localhost:27018,localhost:27019/load?replicaSet=rs_1")
+    {:ok, conn} =
+      Mongo.start_link(
+        url: "mongodb://localhost:27017,localhost:27018,localhost:27019/load?replicaSet=rs_1"
+      )
 
     Enum.map(1..10_000, fn counter -> Mongo.insert_one(conn, "data", %{counter: counter}) end)
     Reader.start_link(conn)

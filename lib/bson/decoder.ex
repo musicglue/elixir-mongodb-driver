@@ -10,24 +10,41 @@ defmodule BSON.Decoder do
 
   def documents(binary), do: documents(binary, [])
   def documents("", acc), do: Enum.reverse(acc)
+
   def documents(binary, acc) do
     {doc, rest} = document(binary)
-    documents(rest, [doc|acc])
+    documents(rest, [doc | acc])
   end
 
-  defp type(@type_float, <<0, 0, 0, 0, 0, 0, 240::little-integer-size(8), 127::little-integer-size(8), rest::binary>>) do
+  defp type(
+         @type_float,
+         <<0, 0, 0, 0, 0, 0, 240::little-integer-size(8), 127::little-integer-size(8),
+           rest::binary>>
+       ) do
     {:inf, rest}
   end
 
-  defp type(@type_float, <<0, 0, 0, 0, 0, 0, 240::little-integer-size(8), 255::little-integer-size(8), rest::binary>>) do
+  defp type(
+         @type_float,
+         <<0, 0, 0, 0, 0, 0, 240::little-integer-size(8), 255::little-integer-size(8),
+           rest::binary>>
+       ) do
     {:"-inf", rest}
   end
 
-  defp type(@type_float, <<0, 0, 0, 0, 0, 0, 248::little-integer-size(8), 127::little-integer-size(8), rest::binary>>) do
+  defp type(
+         @type_float,
+         <<0, 0, 0, 0, 0, 0, 248::little-integer-size(8), 127::little-integer-size(8),
+           rest::binary>>
+       ) do
     {:NaN, rest}
   end
 
-  defp type(@type_float, <<1, 0, 0, 0, 0, 0, 240::little-integer-size(8), 127::little-integer-size(8), rest::binary>>) do
+  defp type(
+         @type_float,
+         <<1, 0, 0, 0, 0, 0, 240::little-integer-size(8), 127::little-integer-size(8),
+           rest::binary>>
+       ) do
     {:NaN, rest}
   end
 
@@ -49,7 +66,11 @@ defmodule BSON.Decoder do
     list(binary)
   end
 
-  defp type(@type_binary, <<_size::int32, subtype, length::int32, binary::binary(length), rest::binary>>) when subtype == 0x02 do
+  defp type(
+         @type_binary,
+         <<_size::int32, subtype, length::int32, binary::binary(length), rest::binary>>
+       )
+       when subtype == 0x02 do
     subtype = subtype(subtype)
     {%BSON.Binary{binary: binary, subtype: subtype}, rest}
   end
@@ -141,11 +162,11 @@ defmodule BSON.Decoder do
     {key, rest} = cstring(rest)
     {value, rest} = type(type, rest)
 
-    doc_fields(rest, [{key, value}|acc])
+    doc_fields(rest, [{key, value} | acc])
   end
 
   defp doc_fields("", acc) do
-    acc |> Enum.reverse |> Enum.into(%{})
+    acc |> Enum.reverse() |> Enum.into(%{})
   end
 
   defp list(<<size::int32, rest::binary>>) do
@@ -160,11 +181,11 @@ defmodule BSON.Decoder do
     {^ix_string, rest} = cstring(rest)
     {value, rest} = type(type, rest)
 
-    list_elems(rest, ix + 1, [value|acc])
+    list_elems(rest, ix + 1, [value | acc])
   end
 
   defp list_elems("", _ix, acc) do
-    acc |> Enum.reverse
+    acc |> Enum.reverse()
   end
 
   defp cstring(binary) do

@@ -14,13 +14,12 @@ defmodule Mongo.MongoDBConnection do
 
   require Logger
 
-  @timeout        5_000
+  @timeout 5_000
   @find_one_flags ~w(slave_ok exhaust partial)a
-  @write_concern  ~w(w j wtimeout)a
+  @write_concern ~w(w j wtimeout)a
 
   @impl true
   def connect(opts) do
-
     {write_concern, opts} = Keyword.split(opts, @write_concern)
     write_concern = Keyword.put_new(write_concern, :w, 1)
 
@@ -37,6 +36,7 @@ defmodule Mongo.MongoDBConnection do
       topology_pid: Keyword.fetch!(opts, :topology_pid),
       ssl: opts[:ssl] || opts[:tls] || false
     }
+
     connect(opts, state)
   end
 
@@ -51,7 +51,6 @@ defmodule Mongo.MongoDBConnection do
   end
 
   defp connect(opts, state) do
-
     result =
       with {:ok, state} <- tcp_connect(opts, state),
            {:ok, state} <- maybe_ssl(opts, state),
@@ -66,23 +65,31 @@ defmodule Mongo.MongoDBConnection do
         {:ok, state}
 
       {:disconnect, reason, state} ->
-        reason = case reason do
-          {:tcp_recv, reason} -> Mongo.Error.exception(tag: :tcp, action: "recv", reason: reason, host: state.host)
-          {:tcp_send, reason} -> Mongo.Error.exception(tag: :tcp, action: "send", reason: reason, host: state.host)
-          %Mongo.Error{} = reason -> reason
-        end
+        reason =
+          case reason do
+            {:tcp_recv, reason} ->
+              Mongo.Error.exception(tag: :tcp, action: "recv", reason: reason, host: state.host)
+
+            {:tcp_send, reason} ->
+              Mongo.Error.exception(tag: :tcp, action: "send", reason: reason, host: state.host)
+
+            %Mongo.Error{} = reason ->
+              reason
+          end
+
         {mod, socket} = state.connection
         mod.close(socket)
         {:error, reason}
 
-      {:error, reason} -> {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   defp maybe_auth(opts, state) do
     case opts[:skip_auth] do
       true -> {:ok, state}
-      _    -> Mongo.Auth.run(opts, state)
+      _ -> Mongo.Auth.run(opts, state)
     end
   end
 
@@ -90,36 +97,48 @@ defmodule Mongo.MongoDBConnection do
   defp maybe_ssl(_opts, state), do: {:ok, state}
 
   defp ssl(opts, %{connection: {:gen_tcp, socket}} = state) do
-    host     = (opts[:hostname] || "localhost") |> to_charlist
+    host = (opts[:hostname] || "localhost") |> to_charlist
     ssl_opts = Keyword.put_new(opts[:ssl_opts] || [], :server_name_indication, host)
+
     case :ssl.connect(socket, ssl_opts, state.connect_timeout) do
-      {:ok, ssl_sock}  -> {:ok, %{state | connection: {:ssl, ssl_sock}}}
+      {:ok, ssl_sock} ->
+        {:ok, %{state | connection: {:ssl, ssl_sock}}}
+
       {:error, reason} ->
         :gen_tcp.close(socket)
-        {:error, Mongo.Error.exception(tag: :ssl, action: "connect", reason: reason, host: state.host)}
+
+        {:error,
+         Mongo.Error.exception(tag: :ssl, action: "connect", reason: reason, host: state.host)}
     end
   end
 
   defp tcp_connect(opts, s) do
     {host, port} = Utils.hostname_port(opts)
-    sock_opts   = [:binary, active: false, packet: :raw, nodelay: true] ++ (opts[:socket_options] || [])
 
-    s = case host do
-      {:local, socket} -> Map.put(s, :host, socket)
-      hostname         -> Map.put(s, :host, "#{hostname}:#{port}")
-    end
+    sock_opts =
+      [:binary, active: false, packet: :raw, nodelay: true] ++ (opts[:socket_options] || [])
+
+    s =
+      case host do
+        {:local, socket} -> Map.put(s, :host, socket)
+        hostname -> Map.put(s, :host, "#{hostname}:#{port}")
+      end
 
     case :gen_tcp.connect(host, port, sock_opts, s.connect_timeout) do
       {:ok, socket} ->
         # A suitable :buffer is only set if :recbuf is included in
         # :socket_options.
-        {:ok, [sndbuf: sndbuf, recbuf: recbuf, buffer: buffer]} = :inet.getopts(socket, [:sndbuf, :recbuf, :buffer])
+        {:ok, [sndbuf: sndbuf, recbuf: recbuf, buffer: buffer]} =
+          :inet.getopts(socket, [:sndbuf, :recbuf, :buffer])
+
         buffer = buffer |> max(sndbuf) |> max(recbuf)
         :ok = :inet.setopts(socket, buffer: buffer)
 
         {:ok, %{s | connection: {:gen_tcp, socket}}}
 
-      {:error, reason} -> {:error, Mongo.Error.exception(tag: :tcp, action: "connect", reason: reason, host: s.host)}
+      {:error, reason} ->
+        {:error,
+         Mongo.Error.exception(tag: :tcp, action: "connect", reason: reason, host: s.host)}
     end
   end
 
@@ -130,12 +149,18 @@ defmodule Mongo.MongoDBConnection do
     cmd = [ismaster: 1, client: client] |> filter_nils()
 
     case Utils.command(-1, cmd, state) do
-      {:ok, %{"ok" => ok, "maxWireVersion" => version}}  when ok == 1 -> {:ok, %{state | wire_version: version}}
-      {:ok, %{"ok" => ok}} when ok == 1 ->  {:ok, %{state | wire_version: 0}}
+      {:ok, %{"ok" => ok, "maxWireVersion" => version}} when ok == 1 ->
+        {:ok, %{state | wire_version: version}}
+
+      {:ok, %{"ok" => ok}} when ok == 1 ->
+        {:ok, %{state | wire_version: 0}}
+
       {:ok, %{"ok" => ok, "errmsg" => msg, "code" => code}} when ok == 0 ->
         err = Mongo.Error.exception(message: msg, code: code)
         {:disconnect, err, state}
-      {:disconnect, _, _} = error ->   error
+
+      {:disconnect, _, _} = error ->
+        error
     end
   end
 
@@ -144,22 +169,29 @@ defmodule Mongo.MongoDBConnection do
   end
 
   defp driver(appname) do
-
-    driver_version = case :application.get_key(:mongodb_driver, :vsn) do
-      {:ok, version} -> to_string(version)
-      _              -> "??"
-    end
+    driver_version =
+      case :application.get_key(:mongodb_driver, :vsn) do
+        {:ok, version} -> to_string(version)
+        _ -> "??"
+      end
 
     {architecture, name} = get_architecture()
 
-    version = case :os.version() do
-      {one, two, tree} -> to_string(one) <> "." <> to_string(two) <> "." <> to_string(tree)
-      s                -> s
-    end
+    version =
+      case :os.version() do
+        {one, two, tree} -> to_string(one) <> "." <> to_string(two) <> "." <> to_string(tree)
+        s -> s
+      end
 
-    plattform = "Elixir (" <> System.version() <> "), Erlang/OTP (" <> to_string(:erlang.system_info(:otp_release)) <> "), ERTS (" <> to_string(:erlang.system_info(:version)) <> ")"
+    plattform =
+      "Elixir (" <>
+        System.version() <>
+        "), Erlang/OTP (" <>
+        to_string(:erlang.system_info(:otp_release)) <>
+        "), ERTS (" <> to_string(:erlang.system_info(:version)) <> ")"
 
     type = elem(:os.type(), 1)
+
     %{
       client: %{
         application: %{name: appname}
@@ -181,9 +213,9 @@ defmodule Mongo.MongoDBConnection do
   defp get_architecture() do
     case String.split(to_string(:erlang.system_info(:system_architecture)), "-") do
       [architecture, name | _rest] -> {architecture, name}
-      ["win32"]                    -> {"win32", "Windows"}
-      [one]                        -> {"??", one}
-      []                           -> {"??", "??"}
+      ["win32"] -> {"win32", "Windows"}
+      [one] -> {"??", one}
+      [] -> {"??", "??"}
     end
   end
 
@@ -202,7 +234,7 @@ defmodule Mongo.MongoDBConnection do
   @impl true
   def handle_commit(_opts, state), do: {:ok, nil, state}
   @impl true
-  def handle_deallocate(_query, _cursor, _opts, state), do:  {:ok, nil, state}
+  def handle_deallocate(_query, _cursor, _opts, state), do: {:ok, nil, state}
   @impl true
   def handle_declare(query, _params, _opts, state), do: {:ok, query, nil, state}
   @impl true
@@ -225,69 +257,108 @@ defmodule Mongo.MongoDBConnection do
 
   @impl true
   def handle_execute(%Mongo.Query{action: action} = query, params, opts, original_state) do
-    tmp_state = %{original_state | database: Keyword.get(opts, :database, original_state.database)}
+    tmp_state = %{
+      original_state
+      | database: Keyword.get(opts, :database, original_state.database)
+    }
+
     with {:ok, reply, tmp_state} <- execute_action(action, params, opts, tmp_state) do
       {:ok, query, reply, Map.put(tmp_state, :database, original_state.database)}
     end
   end
 
-  @insecure_cmds [:authenticate, :saslStart, :saslContinue, :getnonce, :createUser, :updateUser, :copydbgetnonce, :copydbsaslstart, :copydb, :isMaster, :ismaster]
-  defp provide_cmd_data([{command_name,_}|_] = cmd) do
+  @insecure_cmds [
+    :authenticate,
+    :saslStart,
+    :saslContinue,
+    :getnonce,
+    :createUser,
+    :updateUser,
+    :copydbgetnonce,
+    :copydbsaslstart,
+    :copydb,
+    :isMaster,
+    :ismaster
+  ]
+  defp provide_cmd_data([{command_name, _} | _] = cmd) do
     case Enum.member?(@insecure_cmds, command_name) do
-      true  -> {command_name, %{}}
+      true -> {command_name, %{}}
       false -> {command_name, cmd}
     end
   end
 
-  defp execute_action(:command, [cmd], opts, %{wire_version: version} = state) when version >= 6 do
-
+  defp execute_action(:command, [cmd], opts, %{wire_version: version} = state)
+       when version >= 6 do
     {command_name, data} = provide_cmd_data(cmd)
-    db                   = opts[:database] || state.database
-    cmd                  = cmd ++ ["$db": db]
+    db = opts[:database] || state.database
+    cmd = cmd ++ ["$db": db]
 
     # MongoDB 3.6 only allows certain command arguments to be provided this way. These are:
-    op = case pulling_out?(cmd, :documents) || pulling_out?(cmd, :updates) || pulling_out?(cmd, :deletes) do
-      nil -> op_msg(flags: 0, sections: [section(payload_type: 0, payload: payload(doc: cmd))])
-      key -> pulling_out(cmd, key)
-    end
+    op =
+      case pulling_out?(cmd, :documents) || pulling_out?(cmd, :updates) ||
+             pulling_out?(cmd, :deletes) do
+        nil -> op_msg(flags: 0, sections: [section(payload_type: 0, payload: payload(doc: cmd))])
+        key -> pulling_out(cmd, key)
+      end
 
     # overwrite temporary timeout by timeout option
     timeout = Keyword.get(opts, :timeout, state.timeout)
 
     event = %CommandStartedEvent{
-            command: data,
-            command_name: opts[:command_name] || command_name,
-            database_name: db,
-            request_id: state.request_id,
-            operation_id: opts[:operation_id],
-            connection_id: self()}
+      command: data,
+      command_name: opts[:command_name] || command_name,
+      database_name: db,
+      request_id: state.request_id,
+      operation_id: opts[:operation_id],
+      connection_id: self()
+    }
 
     Events.notify(event, :commands)
 
-    with {duration, {:ok, doc}} <- :timer.tc(fn -> Utils.post_request(op, state.request_id, %{state | timeout: timeout}) end),
+    with {duration, {:ok, doc}} <-
+           :timer.tc(fn ->
+             Utils.post_request(op, state.request_id, %{state | timeout: timeout})
+           end),
          state = %{state | request_id: state.request_id + 1} do
       {:ok, {doc, {event, duration}}, state}
     end
   end
-  defp execute_action(:command, [cmd], opts, state) do
 
-    [{command_name,_}|_] = cmd
+  defp execute_action(:command, [cmd], opts, state) do
+    [{command_name, _} | _] = cmd
+
     event = %CommandStartedEvent{
       command: cmd,
       command_name: opts[:command_name] || command_name,
       database_name: opts[:database] || state.database,
       request_id: state.request_id,
       operation_id: opts[:operation_id],
-      connection_id: self()}
+      connection_id: self()
+    }
 
-    flags    = Keyword.take(opts, @find_one_flags)
-    op       = op_query(coll: Utils.namespace("$cmd", state, opts[:database]), query: cmd, select: "", num_skip: 0, num_return: 1, flags: flags(flags))
-    timeout  = Keyword.get(opts, :timeout, state.timeout)
-    with {duration, {:ok, doc}} <- :timer.tc(fn -> Utils.post_request(op, state.request_id, %{state | timeout: timeout}) end),
-         state = %{state | request_id: state.request_id + 1}  do
+    flags = Keyword.take(opts, @find_one_flags)
+
+    op =
+      op_query(
+        coll: Utils.namespace("$cmd", state, opts[:database]),
+        query: cmd,
+        select: "",
+        num_skip: 0,
+        num_return: 1,
+        flags: flags(flags)
+      )
+
+    timeout = Keyword.get(opts, :timeout, state.timeout)
+
+    with {duration, {:ok, doc}} <-
+           :timer.tc(fn ->
+             Utils.post_request(op, state.request_id, %{state | timeout: timeout})
+           end),
+         state = %{state | request_id: state.request_id + 1} do
       {:ok, {doc, {event, duration}}, state}
     end
   end
+
   defp execute_action(:error, _query, _opts, state) do
     exception = Mongo.Error.exception("Test-case")
     {:disconnect, exception, state}
@@ -295,27 +366,30 @@ defmodule Mongo.MongoDBConnection do
 
   defp pulling_out?(cmd, key) do
     case Keyword.has_key?(cmd, key) do
-      true  -> key
+      true -> key
       false -> nil
     end
   end
 
   defp pulling_out(cmd, key) when is_atom(key) do
-
     docs = Keyword.get(cmd, key)
-    cmd  = Keyword.delete(cmd, key)
+    cmd = Keyword.delete(cmd, key)
 
     payload_0 = section(payload_type: 0, payload: payload(doc: cmd))
-    payload_1 = section(payload_type: 1, payload: payload(sequence: sequence(identifier: to_string(key), docs: docs)))
+
+    payload_1 =
+      section(
+        payload_type: 1,
+        payload: payload(sequence: sequence(identifier: to_string(key), docs: docs))
+      )
 
     op_msg(flags: 0, sections: [payload_0, payload_1])
   end
 
   defp flags(flags) do
     Enum.reduce(flags, [], fn
-      {flag, true},   acc -> [flag|acc]
+      {flag, true}, acc -> [flag | acc]
       {_flag, false}, acc -> acc
     end)
   end
-
 end

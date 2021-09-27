@@ -5,11 +5,11 @@ defmodule Mongo.InsertOneResult do
     * `:inserted_id` - The id of the inserted document
   """
 
-  @type t :: %__MODULE__{
-    inserted_id: nil | BSON.ObjectId.t
-  }
+  # @type t :: %__MODULE__{
+  #   inserted_id: nil | BSON.ObjectId.t
+  # }
 
-  defstruct [acknowledged: true, inserted_id: nil]
+  defstruct acknowledged: true, inserted_id: nil
 end
 
 defmodule Mongo.InsertManyResult do
@@ -19,11 +19,11 @@ defmodule Mongo.InsertManyResult do
     * `:inserted_ids` - The ids of the inserted documents indexed by their order
   """
 
-  @type t :: %__MODULE__{
-    inserted_ids: %{non_neg_integer => BSON.ObjectId.t}
-  }
+  # @type t :: %__MODULE__{
+  #   inserted_ids: %{non_neg_integer => BSON.ObjectId.t}
+  # }
 
-  defstruct [acknowledged: true, inserted_ids: nil]
+  defstruct acknowledged: true, inserted_ids: nil
 end
 
 defmodule Mongo.DeleteResult do
@@ -35,12 +35,12 @@ defmodule Mongo.DeleteResult do
     * `:acknowledged` - Write-concern
   """
 
-  @type t :: %__MODULE__{
-    acknowledged: boolean,
-    deleted_count: non_neg_integer
-  }
+  # @type t :: %__MODULE__{
+  #   acknowledged: boolean,
+  #   deleted_count: non_neg_integer
+  # }
 
-  defstruct [acknowledged: true, deleted_count: 0]
+  defstruct acknowledged: true, deleted_count: 0
 end
 
 defmodule Mongo.UpdateResult do
@@ -53,18 +53,17 @@ defmodule Mongo.UpdateResult do
     * `:upserted_ids` - If the operation was an upsert, the upserted ids
   """
 
-  @type t :: %__MODULE__{
-    acknowledged: boolean,
-    matched_count: non_neg_integer,
-    modified_count: non_neg_integer,
-    upserted_ids: list(BSON.ObjectId.t)
-  }
+  # @type t :: %__MODULE__{
+  #   acknowledged: boolean,
+  #   matched_count: non_neg_integer,
+  #   modified_count: non_neg_integer,
+  #   upserted_ids: list(BSON.ObjectId.t)
+  # }
 
-  defstruct [acknowledged: true, matched_count: 0, modified_count: 0, upserted_ids: []]
+  defstruct acknowledged: true, matched_count: 0, modified_count: 0, upserted_ids: []
 end
 
 defmodule Mongo.BulkWriteResult do
-
   @moduledoc """
   The successful result struct of `Mongo.BulkWrite.write`. Its fields are:
 
@@ -80,28 +79,42 @@ defmodule Mongo.BulkWriteResult do
 
   """
 
-  @type t :: %__MODULE__{
-               acknowledged: boolean,
-               matched_count: non_neg_integer,
-               modified_count: non_neg_integer,
-               inserted_count: non_neg_integer,
-               deleted_count: non_neg_integer,
-               upserted_count: non_neg_integer,
-               upserted_ids: list(BSON.ObjectId.t),
-               inserted_ids: list(BSON.ObjectId.t),
-               errors: list(Map.t)
-             }
+  # @type t :: %__MODULE__{
+  #              acknowledged: boolean,
+  #              matched_count: non_neg_integer,
+  #              modified_count: non_neg_integer,
+  #              inserted_count: non_neg_integer,
+  #              deleted_count: non_neg_integer,
+  #              upserted_count: non_neg_integer,
+  #              upserted_ids: list(BSON.ObjectId.t),
+  #              inserted_ids: list(BSON.ObjectId.t),
+  #              errors: list(Map.t)
+  #            }
 
-   alias Mongo.BulkWriteResult
+  alias Mongo.BulkWriteResult
 
-  defstruct [acknowledged: true, matched_count: 0, modified_count: 0, inserted_count: 0, deleted_count: 0, upserted_count: 0, inserted_ids: [], upserted_ids: [], errors: []]
+  defstruct acknowledged: true,
+            matched_count: 0,
+            modified_count: 0,
+            inserted_count: 0,
+            deleted_count: 0,
+            upserted_count: 0,
+            inserted_ids: [],
+            upserted_ids: [],
+            errors: []
 
   def insert_result(count, ids, errors) do
     %BulkWriteResult{inserted_count: count, inserted_ids: ids, errors: errors}
   end
 
   def update_result(matched_count, modified_count, upserted_count, ids, errors) do
-    %BulkWriteResult{matched_count: matched_count, modified_count: modified_count, upserted_count: upserted_count, upserted_ids: ids, errors: errors}
+    %BulkWriteResult{
+      matched_count: matched_count,
+      modified_count: modified_count,
+      upserted_count: upserted_count,
+      upserted_ids: ids,
+      errors: errors
+    }
   end
 
   def delete_result(count, errors) do
@@ -117,7 +130,8 @@ defmodule Mongo.BulkWriteResult do
   end
 
   def add(%BulkWriteResult{} = src, %BulkWriteResult{} = dest) do
-    %BulkWriteResult{acknowledged: src.acknowledged,
+    %BulkWriteResult{
+      acknowledged: src.acknowledged,
       matched_count: src.matched_count + dest.matched_count,
       modified_count: src.modified_count + dest.modified_count,
       inserted_count: src.inserted_count + dest.inserted_count,
@@ -136,5 +150,4 @@ defmodule Mongo.BulkWriteResult do
   def reduce(results) do
     reduce(results, %BulkWriteResult{})
   end
-
 end

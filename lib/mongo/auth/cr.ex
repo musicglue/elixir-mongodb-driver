@@ -8,18 +8,22 @@ defmodule Mongo.Auth.CR do
   end
 
   defp nonce(%{"nonce" => nonce, "ok" => ok}, username, password, s)
-  when ok == 1 # to support a response that returns 1 or 1.0
-  do
+       # to support a response that returns 1 or 1.0
+       when ok == 1 do
     digest = Utils.digest(nonce, username, password)
     command = [authenticate: 1, user: username, nonce: nonce, key: digest]
 
     case Utils.command(-3, command, s) do
       {:ok, %{"ok" => ok}} when ok == 1 ->
         :ok
+
       {:ok, %{"ok" => 0.0, "errmsg" => reason, "code" => code}} ->
-        {:error, Mongo.Error.exception(message: "auth failed for '#{username}': #{reason}", code: code)}
+        {:error,
+         Mongo.Error.exception(message: "auth failed for '#{username}': #{reason}", code: code)}
+
       {:ok, nil} ->
         {:error, Mongo.Error.exception(message: "auth failed for '#{username}'")}
+
       error ->
         error
     end

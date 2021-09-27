@@ -25,7 +25,7 @@ defmodule ChangeStream do
   end
 
   def handle_info({:DOWN, _, :process, _pid, reason}, state) do
-    Logger.info("#Cursor process is down: #{inspect reason}")
+    Logger.info("#Cursor process is down: #{inspect(reason)}")
     Process.send_after(self(), :connect, 3000)
     {:noreply, state}
   end
@@ -42,25 +42,33 @@ defmodule ChangeStream do
   end
 
   def handle_cast({:doc, doc}, state) do
-    Logger.info("Receiving new document #{inspect doc["ns"]}")
+    Logger.info("Receiving new document #{inspect(doc["ns"])}")
     process_doc(doc)
     {:noreply, state}
   end
 
   def handle_cast({:token, token}, state) do
-    Logger.info("Receiving new token #{inspect token}")
+    Logger.info("Receiving new token #{inspect(token)}")
     {:noreply, %{state | last_resume_token: token}}
   end
 
-  defp process_doc(%{"fullDocument" => %{"url" => url}, "ns" => %{"coll" => "http_errors", "db" => "db-1"}}) do
+  defp process_doc(%{
+         "fullDocument" => %{"url" => url},
+         "ns" => %{"coll" => "http_errors", "db" => "db-1"}
+       }) do
     Logger.info("Got http error for url #{url}")
   end
 
   defp get_cursor(%{last_resume_token: nil}) do
-    Mongo.watch_collection(:mongo, @collection, [], fn token -> new_token(token) end, max_time: 2_000)
-  end
-  defp get_cursor(%{last_resume_token: token}) do
-    Mongo.watch_collection(:mongo, @collection, [], fn token -> new_token(token) end, max_time: 2_000, resume_after: token)
+    Mongo.watch_collection(:mongo, @collection, [], fn token -> new_token(token) end,
+      max_time: 2_000
+    )
   end
 
+  defp get_cursor(%{last_resume_token: token}) do
+    Mongo.watch_collection(:mongo, @collection, [], fn token -> new_token(token) end,
+      max_time: 2_000,
+      resume_after: token
+    )
+  end
 end
