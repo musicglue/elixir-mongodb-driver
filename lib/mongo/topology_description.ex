@@ -231,8 +231,12 @@ defmodule Mongo.TopologyDescription do
   ##
   # find the primary server
   #
+  # Falls back to {nil, nil} so a topology that claims :replica_set_with_primary
+  # while no server is typed :rs_primary degrades to calc_staleness(nil, ...),
+  # instead of raising a MatchError and killing the topology process.
+  #
   defp find_primary(servers) do
-    Enum.find(servers, fn {_, %{type: type}} -> type == :rs_primary end)
+    Enum.find(servers, {nil, nil}, fn {_, %{type: type}} -> type == :rs_primary end)
   end
 
   ##
@@ -442,8 +446,14 @@ defmodule Mongo.TopologyDescription do
       type when type in [:rs_secondary, :rs_arbiter, :rs_ghost] ->
         update_rs_with_primary_from_member(topology, server_description)
 
+      ##
+      # Any other type (:rs_other for a RECOVERING / STARTUP2 / ROLLBACK member,
+      # :possible_primary) has already been written into topology.servers by the
+      # caller. Re-derive the topology type, otherwise a stepping-down primary
+      # leaves the topology claiming :replica_set_with_primary with no
+      # :rs_primary server in the map.
       _ ->
-        {[], topology}
+        check_if_has_primary(topology)
     end
   end
 

@@ -123,6 +123,33 @@ defmodule Mongo.TopologyDescriptionTest do
     assert Enum.any?(all_hosts, fn sec -> sec == server end)
   end
 
+  test "a primary reporting :rs_other drops the topology to :replica_set_no_primary" do
+    # A stepping-down primary answers hello with neither isWritablePrimary nor
+    # secondary set, so it is typed :rs_other. The topology type has to follow,
+    # otherwise it claims a primary that is no longer in the servers map.
+    topology = repl_set_with_master()
+    stepping_down = %{topology.servers["localhost:27018"] | type: :rs_other}
+
+    {_actions, topology} = TopologyDescription.update(topology, stepping_down, 3)
+
+    assert topology.type == :replica_set_no_primary
+  end
+
+  test "maxStaleness selection survives a topology claiming a primary it does not have" do
+    # Guards the read path against any remaining way the type can outlive the
+    # primary: without a primary there is nothing to measure staleness against,
+    # so every secondary stays eligible rather than the selection crashing.
+    topology = put_in(repl_set_with_master().servers["localhost:27018"].type, :rs_other)
+
+    opts = [
+      read_preference: ReadPreference.primary(%{mode: :secondary_preferred, max_staleness_ms: 90_000})
+    ]
+
+    {:ok, {server, _}} = TopologyDescription.select_servers(topology, :read, opts)
+
+    assert server in ["localhost:27019", "localhost:27020"]
+  end
+
   test "Simplified server selection" do
     single_server = "localhost:27017"
 
