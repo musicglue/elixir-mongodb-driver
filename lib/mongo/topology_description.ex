@@ -214,41 +214,47 @@ defmodule Mongo.TopologyDescription do
   defp filter_out_stale(servers, _topology, 0), do: servers
 
   defp filter_out_stale(servers, topology, max_staleness_ms) do
-    {_, primary} =
-      case topology.type do
-        :replica_set_no_primary -> find_max_secondary(servers)
-        :replica_set_with_primary -> find_primary(topology.servers)
-      end
+    {basis, topology} = staleness_basis(servers, topology)
 
     servers
     |> Enum.filter(fn
-      {_, %{type: :rs_secondary} = secondary} -> calc_staleness(primary, secondary, topology) < max_staleness_ms
+      {_, %{type: :rs_secondary} = secondary} -> calc_staleness(basis, secondary, topology) < max_staleness_ms
       {_, _other} -> true
     end)
     |> Enum.into(%{})
   end
 
   ##
-  # find the primary server
+  # A topology can claim :replica_set_with_primary while no server is typed
+  # :rs_primary (e.g. after Mongo.Topology resets the servers to the seeds), so
+  # measure against SMax as the spec does for a primary-less replica set.
   #
-  # Falls back to {nil, nil} so a topology that claims :replica_set_with_primary
-  # while no server is typed :rs_primary degrades to calc_staleness(nil, ...),
-  # instead of raising a MatchError and killing the topology process.
-  #
-  defp find_primary(servers) do
-    Enum.find(servers, {nil, nil}, fn {_, %{type: type}} -> type == :rs_primary end)
+  defp staleness_basis(servers, %{type: :replica_set_with_primary} = topology) do
+    case find_primary(topology.servers) do
+      nil -> staleness_basis(servers, %{topology | type: :replica_set_no_primary})
+      {_, primary} -> {primary, topology}
+    end
+  end
+
+  defp staleness_basis(servers, %{type: :replica_set_no_primary} = topology) do
+    {_, smax} = find_max_secondary(servers)
+    {smax, topology}
   end
 
   ##
-  # find server with the max last write date!
+  # find the primary server
+  #
+  defp find_primary(servers) do
+    Enum.find(servers, fn {_, %{type: type}} -> type == :rs_primary end)
+  end
+
+  ##
+  # find the secondary with the latest last write date
   #
   defp find_max_secondary(servers) do
-    Enum.reduce(servers, {0, nil}, fn {_, server}, {max, max_server} ->
-      case server.last_write_date > max do
-        true -> {server.last_write_date, server}
-        false -> {max, max_server}
-      end
-    end)
+    servers
+    |> Enum.filter(fn {_, server} -> server.type == :rs_secondary end)
+    |> Enum.max_by(fn {_, server} -> server.last_write_date end, DateTime, fn -> {nil, nil} end)
   end
 
   ##
@@ -443,17 +449,11 @@ defmodule Mongo.TopologyDescription do
       :rs_primary ->
         update_rs_from_primary(topology, server_description)
 
-      type when type in [:rs_secondary, :rs_arbiter, :rs_ghost] ->
+      type when type in [:rs_secondary, :rs_arbiter, :rs_ghost, :rs_other] ->
         update_rs_with_primary_from_member(topology, server_description)
 
-      ##
-      # Any other type (:rs_other for a RECOVERING / STARTUP2 / ROLLBACK member,
-      # :possible_primary) has already been written into topology.servers by the
-      # caller. Re-derive the topology type, otherwise a stepping-down primary
-      # leaves the topology claiming :replica_set_with_primary with no
-      # :rs_primary server in the map.
       _ ->
-        check_if_has_primary(topology)
+        {[], topology}
     end
   end
 

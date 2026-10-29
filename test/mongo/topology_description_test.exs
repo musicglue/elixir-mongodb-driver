@@ -135,19 +135,27 @@ defmodule Mongo.TopologyDescriptionTest do
     assert topology.type == :replica_set_no_primary
   end
 
-  test "maxStaleness selection survives a topology claiming a primary it does not have" do
-    # Guards the read path against any remaining way the type can outlive the
-    # primary: without a primary there is nothing to measure staleness against,
-    # so every secondary stays eligible rather than the selection crashing.
-    topology = put_in(repl_set_with_master().servers["localhost:27018"].type, :rs_other)
+  test "maxStaleness still rejects a lagging secondary when the claimed primary is missing" do
+    now = DateTime.utc_now()
+
+    topology =
+      repl_set_with_master()
+      |> Map.put(:heartbeat_frequency_ms, 10_000)
+      |> put_in([:servers, "localhost:27018", :type], :rs_other)
+      |> put_in([:servers, "localhost:27019", :last_write_date], now)
+      |> put_in([:servers, "localhost:27020", :last_write_date], DateTime.add(now, -200, :second))
 
     opts = [
       read_preference: ReadPreference.primary(%{mode: :secondary_preferred, max_staleness_ms: 90_000})
     ]
 
-    {:ok, {server, _}} = TopologyDescription.select_servers(topology, :read, opts)
+    selected =
+      for _ <- 1..50 do
+        {:ok, {server, _}} = TopologyDescription.select_servers(topology, :read, opts)
+        server
+      end
 
-    assert server in ["localhost:27019", "localhost:27020"]
+    assert Enum.uniq(selected) == ["localhost:27019"]
   end
 
   test "Simplified server selection" do
